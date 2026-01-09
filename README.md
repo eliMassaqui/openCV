@@ -1,4 +1,4 @@
-# Motor de Gestos Python - Interface Neon 🖐️⚡
+# Motor de Gestos Python - Interface Neon ==== ANACONDA 🖐️⚡
 
 Este projeto é um sistema de visão computacional de alta performance que utiliza Mediapipe e OpenCV para rastrear mãos em tempo real com uma interface HUD (Heads-Up Display) estilizada em cores neon.
 
