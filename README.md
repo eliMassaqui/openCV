@@ -1,6 +1,8 @@
 # Motor de Gestos Python - Interface Neon ==== ANACONDA 🖐️⚡
 
 ![OPENCV](https://github.com/eliMassaqui/openCV/blob/master/Captura%20de%20ecr%C3%A3%202026-01-09%20155611.png)
+![OPENCV](https://github.com/eliMassaqui/openCV/blob/master/WhatsApp%20Image%202026-01-12%20at%2014.47.34.jpeg)
+![OPENCV](https://github.com/eliMassaqui/openCV/blob/master/WhatsApp%20Image%202026-01-12%20at%2014.47.32.jpeg)
 
 
 Este projeto é um sistema de visão computacional de alta performance que utiliza Mediapipe e OpenCV para rastrear mãos em tempo real com uma interface HUD (Heads-Up Display) estilizada em cores neon.
