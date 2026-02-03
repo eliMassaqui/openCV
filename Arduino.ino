@@ -1,4 +1,3 @@
-// Definição dos Pinos e Cores
 const int ledVerde    = 9;
 const int ledAzul     = 10;
 const int ledVermelho = 11;
@@ -17,22 +16,15 @@ void setup() {
 
 void loop() {
   if (Serial.available() > 0) {
-    // Lê o caractere enviado pelo Python
     char recebido = Serial.read();
-    int n = recebido - '0'; // Converte ASCII para Inteiro
+    int n = recebido - '0';
 
-    // Verifica se o valor é válido (0 a 4)
     if (n >= 0 && n <= 4) {
       for (int i = 0; i < numLeds; i++) {
-        if (i < n) {
-          digitalWrite(leds[i], HIGH); // Liga os LEDs em sequência
-        } else {
-          digitalWrite(leds[i], LOW);  // Desliga o restante
-        }
+        digitalWrite(leds[i], i < n ? HIGH : LOW);
       }
     }
-    
-    // Limpeza de segurança do buffer
-    while(Serial.available() > 0) Serial.read();
+
+    while (Serial.available() > 0) Serial.read();
   }
 }
