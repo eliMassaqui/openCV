@@ -1,104 +1,116 @@
 import cv2
 import mediapipe as mp
-import numpy as np
 import serial
 import time
+import numpy as np
+import copy
 
-# Comunicação Serial com Arduino (ajuste a porta)
-arduino = serial.Serial('COM5', 9600)
-time.sleep(2)  # Aguarda Arduino reiniciar
+# --- CONEXÃO SERIAL ---
+try:
+    arduino = serial.Serial('COM5', 9600, timeout=0.1)
+    time.sleep(2)
+except Exception:
+    arduino = None
 
-# Cores Neon
+# --- CONFIGURAÇÃO VISUAL (LIGHT MODE) ---
+FUNDO_OFF_WHITE = (248, 249, 250)
+SUPERFICIE_BRANCA = (255, 255, 255)
+TEXTO_DARK = (45, 41, 38)
+BORDA_SUAVE = (220, 220, 220)
+
+# Mantendo as cores originais das mãos para o rastreio
 AZUL_PYTHON = (255, 150, 50)
 AMARELO_PYTHON = (0, 255, 255)
 BRANCO_PURO = (255, 255, 255)
 
+# --- CONFIGURAÇÃO MEDIAPIPE ---
 mp_hands = mp.solutions.hands
 mp_draw = mp.solutions.drawing_utils
-
-hands = mp_hands.Hands(
-    static_image_mode=False,
-    max_num_hands=2,
-    min_detection_confidence=0.8,
-    min_tracking_confidence=0.8
-)
+hands = mp_hands.Hands(max_num_hands=2, min_detection_confidence=0.8)
 
 cap = cv2.VideoCapture(0)
 
-def desenhar_hud_vibrante(img, texto, total_dedos, mao_tipo, pos_x):
-    overlay = img.copy()
-    cor_tema = AZUL_PYTHON if mao_tipo == "Left" else AMARELO_PYTHON
-    lado_pt = "ESQUERDA" if mao_tipo == "Left" else "DIREITA"
+nome_janela = "Wandi Vision"
+cv2.namedWindow(nome_janela, cv2.WINDOW_NORMAL)
+cv2.setWindowProperty(nome_janela, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-    cv2.rectangle(overlay, (pos_x, 20), (pos_x + 280, 130), (10, 10, 10), -1)
-    cv2.addWeighted(overlay, 0.7, img, 0.3, 0, img)
-
-    cv2.line(img, (pos_x, 20), (pos_x + 50, 20), cor_tema, 4)
-    cv2.line(img, (pos_x, 20), (pos_x, 70), cor_tema, 4)
-
-    cv2.putText(img, f"MÃO {lado_pt}", (pos_x + 15, 55), 
-                cv2.FONT_HERSHEY_DUPLEX, 0.7, cor_tema, 2)
-    
-    cv2.putText(img, texto, (pos_x + 15, 85), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, BRANCO_PURO, 1)
-
-    largura_barra = int((total_dedos / 5) * 250)
-    cv2.rectangle(img, (pos_x + 15, 105), (pos_x + 265, 115), (40, 40, 40), -1)
-    cv2.rectangle(img, (pos_x + 15, 105), (pos_x + 15 + largura_barra, 115), cor_tema, -1)
-
-def contar_dedos_pt(landmarks, hand_label):
-    dedos = []
-    # Polegar
-    if hand_label == "Right":
-        dedos.append(landmarks[4].x < landmarks[3].x)
-    else:
-        dedos.append(landmarks[4].x > landmarks[3].x)
-    # Outros 4 dedos
-    for ponta, base in [(8, 6), (12, 10), (16, 14), (20, 18)]:
-        dedos.append(landmarks[ponta].y < landmarks[base].y)
-    return dedos
-
-while True:
+while cap.isOpened():
     ret, frame = cap.read()
-    if not ret:
-        break
+    if not ret: break
 
     frame = cv2.flip(frame, 1)
-    h, w, _ = frame.shape
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    result = hands.process(rgb)
+    h_frame, w_frame, _ = frame.shape
+    
+    try:
+        _, _, screen_w, screen_h = cv2.getWindowImageRect(nome_janela)
+    except:
+        screen_w, screen_h = 1920, 1080
 
-    total_dedos = 0
+    # --- CANVAS DE FUNDO (LIGHT MODE) ---
+    canvas = np.full((screen_h, screen_w, 3), FUNDO_OFF_WHITE, dtype=np.uint8)
+
+    # --- DIMENSIONAMENTO ---
+    espaco_titulo = int(screen_h * 0.10)
+    margem = 20
+    area_util_w = screen_w - (margem * 2)
+    area_util_h = screen_h - espaco_titulo - margem
+
+    escala = min(area_util_w / w_frame, area_util_h / h_frame)
+    novo_w, novo_h = int(w_frame * escala), int(h_frame * escala)
+    video_res = cv2.resize(frame, (novo_w, novo_h))
+
+    x_offset = (screen_w - novo_w) // 2
+    y_offset = espaco_titulo + (area_util_h - novo_h) // 2
+
+    # --- ESTÉTICA DO PAINEL ---
+    # Card de fundo do vídeo
+    cv2.rectangle(canvas, (x_offset - 5, y_offset - 5), (x_offset + novo_w + 5, y_offset + novo_h + 5), SUPERFICIE_BRANCA, -1)
+    cv2.rectangle(canvas, (x_offset - 5, y_offset - 5), (x_offset + novo_w + 5, y_offset + novo_h + 5), BORDA_SUAVE, 1)
+    
+    # Inserção do vídeo
+    canvas[y_offset:y_offset+novo_h, x_offset:x_offset+novo_w] = video_res
+
+    # Título
+    font = cv2.FONT_HERSHEY_DUPLEX
+    texto = "Wandi Vision - Painel De Controle"
+    escala_fonte = screen_w / 1600
+    tamanho_texto = cv2.getTextSize(texto, font, escala_fonte, 2)[0]
+    cv2.putText(canvas, texto, ((screen_w - tamanho_texto[0]) // 2, int(espaco_titulo * 0.7)), 
+                font, escala_fonte, TEXTO_DARK, 2, cv2.LINE_AA)
+
+    # --- PROCESSAMENTO MEDIAPIPE ---
+    rgb = cv2.cvtColor(video_res, cv2.COLOR_BGR2RGB)
+    result = hands.process(rgb)
 
     if result.multi_hand_landmarks:
         for idx, hand_landmarks in enumerate(result.multi_hand_landmarks):
             info_mao = result.multi_handedness[idx].classification[0].label
-            cor_atual = AZUL_PYTHON if info_mao == "Left" else AMARELO_PYTHON
+            # Retornando ao estilo de cores anterior
+            cor_mao = AZUL_PYTHON if info_mao == "Left" else AMARELO_PYTHON
+            
+            # Deepcopy para não alterar o objeto original durante o mapeamento
+            hl_mapeada = copy.deepcopy(hand_landmarks)
+            for lm in hl_mapeada.landmark:
+                lm.x = (lm.x * novo_w + x_offset) / screen_w
+                lm.y = (lm.y * novo_h + y_offset) / screen_h
 
+            # MANTENDO O ESTILO ANTERIOR:
             mp_draw.draw_landmarks(
-                frame, hand_landmarks, mp_hands.HAND_CONNECTIONS,
-                mp_draw.DrawingSpec(color=BRANCO_PURO, thickness=2, circle_radius=2),
-                mp_draw.DrawingSpec(color=cor_atual, thickness=3)
+                canvas, hl_mapeada, mp_hands.HAND_CONNECTIONS,
+                mp_draw.DrawingSpec(color=BRANCO_PURO, thickness=2, circle_radius=2), # Pontos brancos
+                mp_draw.DrawingSpec(color=cor_mao, thickness=4)                      # Conexões coloridas
             )
 
-            dedos = contar_dedos_pt(hand_landmarks.landmark, info_mao)
-            total = dedos.count(True)
-            total_dedos = max(total_dedos, total)  # Mantém o maior número detectado
+    # --- LOGICA DE SAÍDA ---
+    key = cv2.waitKey(1) & 0xFF
+    if key == 27:
+        if cv2.getWindowProperty(nome_janela, cv2.WND_PROP_FULLSCREEN) == cv2.WINDOW_FULLSCREEN:
+            cv2.setWindowProperty(nome_janela, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
+        else:
+            break
 
-            status = f"PROCESSANDO: {total} DADOS" if total > 0 else "AGUARDANDO ENTRADA"
-            pos_x_hud = 20 if info_mao == "Left" else w - 300
-            desenhar_hud_vibrante(frame, status, total, info_mao, pos_x_hud)
-
-    # Envia o número de dedos para o Arduino (máx 5)
-    arduino.write(str(min(total_dedos, 5)).encode())
-
-    cv2.putText(frame, "MOTOR DE GESTOS PYTHON ATIVO", (w//2 - 150, h - 20), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (180, 180, 180), 1)
-
-    cv2.imshow("Interface Python Neon", frame)
-    if cv2.waitKey(1) & 0xFF == 27:  # ESC para sair
-        break
+    cv2.imshow(nome_janela, canvas)
 
 cap.release()
 cv2.destroyAllWindows()
-arduino.close()
+if arduino: arduino.close()
